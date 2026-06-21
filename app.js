@@ -1,14 +1,17 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// TUTAJ WKLEJ SWÓJ CONFIG Z FIREBASE
+
+
 const firebaseConfig = {
-    apiKey: "TWÓJ_KLUCZ",
-    authDomain: "twoj-projekt.firebaseapp.com",
-    projectId: "twoj-projekt",
-    storageBucket: "twoj-projekt.appspot.com",
-    messagingSenderId: "123456789",
-    appId: "1:123456789:web:abcdef"
+
+  apiKey: "AIzaSyATB3WbLffGoNW93kLTBuTNuIReIBr8Zvc",
+  authDomain: "rodzinne-losowanie.firebaseapp.com",
+  projectId: "rodzinne-losowanie",
+  storageBucket: "rodzinne-losowanie.firebasestorage.app",
+  messagingSenderId: "744421189392",
+  appId: "1:744421189392:web:a3e450723890341c8e2795",
+ measurementId: "G-CW6D6LGFR8"
 };
 
 const app = initializeApp(firebaseConfig);
