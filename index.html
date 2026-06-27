@@ -13,9 +13,17 @@
         <div id="login-panel" class="panel">
             <h2>Logowanie</h2>
             <input type="text" id="username" placeholder="Imię (Login)">
-            <input type="password" id="password" placeholder="Hasło (Imię)">
+            <input type="password" id="password" placeholder="Hasło lub Twój PIN">
             <button id="login-btn">Zaloguj się</button>
-            <p id="login-error" class="error hidden">Błędny login lub hasło!</p>
+            <p id="login-error" class="error hidden">Błędny login, hasło lub PIN!</p>
+        </div>
+
+        <div id="pin-panel" class="panel hidden">
+            <h2>🔒 Zabezpiecz swoje konto</h2>
+            <p>To Twoje pierwsze logowanie. Ustaw swój prywatny, 4-cyfrowy PIN. Twoje stare hasło przestanie działać.</p>
+            <input type="text" id="new-pin" maxlength="4" placeholder="Wpisz 4 cyfry PINu" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+            <button id="save-pin-btn">Zapisz PIN i przejdź do losowania</button>
+            <p id="pin-error" class="error hidden">PIN musi składać się dokładnie z 4 cyfr!</p>
         </div>
 
         <div id="dashboard-panel" class="panel hidden">
@@ -29,10 +37,6 @@
             <div id="result-section" class="hidden">
                 <p>Wylosowana przez Ciebie osoba to:</p>
                 <h3 id="drawn-person" class="highlight"></h3>
-                <div id="wishlist-section" class="hidden">
-                    <h4>Lista życzeń:</h4>
-                    <ul id="wishlist-items"></ul>
-                </div>
             </div>
             
             <button id="logout-btn" class="secondary">Wyloguj</button>
