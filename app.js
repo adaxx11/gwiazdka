@@ -21,16 +21,13 @@ const db = getFirestore(app);
 const loginPanel = document.getElementById('login-panel');
 const pinPanel = document.getElementById('pin-panel');
 const dashboardPanel = document.getElementById('dashboard-panel');
-
 const usernameInput = document.getElementById('username');
 const passwordInput = document.getElementById('password');
 const newPinInput = document.getElementById('new-pin');
-
 const loginBtn = document.getElementById('login-btn');
 const savePinBtn = document.getElementById('save-pin-btn');
 const drawBtn = document.getElementById('draw-btn');
 const logoutBtn = document.getElementById('logout-btn');
-
 const loginError = document.getElementById('login-error');
 const pinError = document.getElementById('pin-error');
 const welcomeMessage = document.getElementById('welcome-message');
@@ -39,16 +36,19 @@ const resultSection = document.getElementById('result-section');
 const drawnPersonText = document.getElementById('drawn-person');
 
 let currentUser = null;
+let clearTextPin = ""; // Przetrzymujemy czysty PIN tylko w pamięci podręcznej sesji do odszyfrowania
 
 window.onload = () => {
     const savedUser = localStorage.getItem('secretSantaUser');
-    if (savedUser) {
+    const savedPin = sessionStorage.getItem('secretSantaPin');
+    if (savedUser && savedPin) {
         currentUser = JSON.parse(savedUser);
+        clearTextPin = savedPin;
         showDashboard();
     }
 };
 
-// 1. Logowanie
+// Logowanie
 loginBtn.addEventListener('click', async () => {
     const user = usernameInput.value.trim().toLowerCase();
     const pass = passwordInput.value.trim().toLowerCase();
@@ -61,18 +61,27 @@ loginBtn.addEventListener('click', async () => {
 
         if (userSnap.exists()) {
             const userData = userSnap.data();
+            let isPasswordCorrect = false;
 
-            // Sprawdzenie hasła (starego imienia lub nowego PINu, zależnie czy konto zabezpieczone)
-            if (userData.password === pass) {
+            if (!userData.isSecured) {
+                // Pierwsze logowanie - porównujemy czysty tekst
+                isPasswordCorrect = (userData.password === pass);
+            } else {
+                // Kolejne logowania - haszujemy wpisany PIN i porównujemy hashe
+                const hashedInput = CryptoJS.SHA256(pass).toString();
+                isPasswordCorrect = (userData.password === hashedInput);
+            }
+
+            if (isPasswordCorrect) {
                 currentUser = { id: userSnap.id, ...userData };
                 loginError.classList.add('hidden');
 
                 if (!userData.isSecured) {
-                    // Pierwsze logowanie -> idź do ustawiania PINu
                     loginPanel.classList.add('hidden');
                     pinPanel.classList.remove('hidden');
                 } else {
-                    // Konto już zabezpieczone -> idź do pulpitu
+                    clearTextPin = pass; // Zapisujemy czysty PIN do deszyfracji
+                    sessionStorage.setItem('secretSantaPin', clearTextPin);
                     localStorage.setItem('secretSantaUser', JSON.stringify(currentUser));
                     showDashboard();
                 }
@@ -88,26 +97,37 @@ loginBtn.addEventListener('click', async () => {
     }
 });
 
-// 2. Zapisywanie nowego PINu
+// Zapisywanie nowego PINu i re-szyfrowanie wyniku
 savePinBtn.addEventListener('click', async () => {
     const pin = newPinInput.value.trim();
 
-    // Walidacja czy to dokładnie 4 cyfry
     if (pin.length !== 4) {
         pinError.classList.remove('hidden');
         return;
     }
 
     try {
+        // 1. Odszyfrowujemy imię starym hasłem (loginem)
+        const bytes = CryptoJS.AES.decrypt(currentUser.drawnUser, currentUser.id);
+        const decryptedDrawnUser = bytes.toString(CryptoJS.enc.Utf8);
+
+        // 2. Szyfrujemy je ponownie nowym, bezpiecznym PINem
+        const reEncryptedDrawnUser = CryptoJS.AES.encrypt(decryptedDrawnUser, pin).toString();
+
+        // 3. Tworzymy nieodwracalny skrót (hash) z PINu do logowania
+        const hashedPin = CryptoJS.SHA256(pin).toString();
+
         const userRef = doc(db, "users", currentUser.id);
-        
-        // Nadpisujemy hasło nowym PINem i oznaczamy konto jako zabezpieczone
         await updateDoc(userRef, {
-            password: pin,
+            password: hashedPin,
+            drawnUser: reEncryptedDrawnUser,
             isSecured: true
         });
 
-        currentUser.password = pin;
+        clearTextPin = pin;
+        sessionStorage.setItem('secretSantaPin', clearTextPin);
+        currentUser.password = hashedPin;
+        currentUser.drawnUser = reEncryptedDrawnUser;
         currentUser.isSecured = true;
         localStorage.setItem('secretSantaUser', JSON.stringify(currentUser));
 
@@ -116,11 +136,10 @@ savePinBtn.addEventListener('click', async () => {
         showDashboard();
     } catch (error) {
         console.error(error);
-        alert("Nie udało się zapisać PINu.");
+        alert("Nie udało się zabezpieczyć konta.");
     }
 });
 
-// Wyświetlanie pulpitu
 function showDashboard() {
     loginPanel.classList.add('hidden');
     pinPanel.classList.add('hidden');
@@ -130,14 +149,21 @@ function showDashboard() {
     if (currentUser.hasDrawn) {
         drawSection.classList.add('hidden');
         resultSection.classList.remove('hidden');
-        drawnPersonText.innerText = capitalizeFirstLetter(currentUser.drawnUser);
+
+        try {
+            // ODSZYFROWANIE WYNIKU przy użyciu PINu zapamiętanego w sesji
+            const bytes = CryptoJS.AES.decrypt(currentUser.drawnUser, clearTextPin);
+            const finalDrawnUser = bytes.toString(CryptoJS.enc.Utf8);
+            drawnPersonText.innerText = capitalizeFirstLetter(finalDrawnUser);
+        } catch (e) {
+            drawnPersonText.innerText = "Błąd odczytu danych.";
+        }
     } else {
         drawSection.classList.remove('hidden');
         resultSection.classList.add('hidden');
     }
 }
 
-// Losowanie (odkrycie)
 drawBtn.addEventListener('click', async () => {
     try {
         const userRef = doc(db, "users", currentUser.id);
@@ -151,10 +177,11 @@ drawBtn.addEventListener('click', async () => {
     }
 });
 
-// Wylogowanie
 logoutBtn.addEventListener('click', () => {
     localStorage.removeItem('secretSantaUser');
+    sessionStorage.removeItem('secretSantaPin');
     currentUser = null;
+    clearTextPin = "";
     usernameInput.value = '';
     passwordInput.value = '';
     newPinInput.value = '';
