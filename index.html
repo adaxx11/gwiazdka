@@ -21,9 +21,9 @@
 
         <div id="pin-panel" class="panel hidden">
             <h2>🔒 Zabezpiecz swoje konto</h2>
-            <p>To Twoje pierwsze logowanie. Ustaw swój prywatny, 4-cyfrowy PIN. Twoje stare hasło przestanie działać.</p>
+            <p>To Twoje pierwsze logowanie. Ustaw swój prywatny, 4-cyfrowy PIN.</p>
             <input type="text" id="new-pin" maxlength="4" placeholder="Wpisz 4 cyfry PINu" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
-            <button id="save-pin-btn">Zapisz PIN i przejdź do losowania</button>
+            <button id="save-pin-btn">Zapisz PIN</button>
             <p id="pin-error" class="error hidden">PIN musi składać się dokładnie z 4 cyfr!</p>
         </div>
 
@@ -31,13 +31,31 @@
             <h2 id="welcome-message"></h2>
             
             <div id="draw-section">
-                <p>Nadszedł czas, aby sprawdzić, komu w tym roku robisz prezent!</p>
-                <button id="draw-btn">🎁 Losuj 🎁</button>
+                <button id="draw-btn">🎁 Odkryj kogo wylosowałeś! 🎁</button>
             </div>
 
             <div id="result-section" class="hidden">
-                <p>Wylosowana przez Ciebie osoba to:</p>
-                <h3 id="drawn-person" class="highlight"></h3>
+                <p>W tym roku robisz prezent dla:</p>
+                <h2 id="drawn-person" class="highlight"></h2>
+            </div>
+
+            <hr>
+
+            <div class="wishlist-box">
+                <h3>🎁 Moje pomysły na prezent:</h3>
+                <div class="gift-form">
+                    <input type="text" id="gift-name" placeholder="Co chcesz dostać? (np. Książka)">
+                    <input type="text" id="gift-link" placeholder="Opcjonalny link do sklepu (np. Allegro)">
+                    <button id="add-gift-btn">Dodaj do mojej listy</button>
+                </div>
+                <ul id="my-gifts-list"></ul>
+            </div>
+
+            <hr>
+
+            <div class="global-box">
+                <h3>📋 Tablica Prezentów Całej Rodziny</h3>
+                <div id="global-gifts-container"></div>
             </div>
             
             <button id="logout-btn" class="secondary">Wyloguj</button>
