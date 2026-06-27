@@ -35,3 +35,17 @@ li { margin: 8px 0; font-size: 15px; }
 .gift-item-row { margin: 8px 0; background: #fafafa; padding: 8px; border-radius: 6px; border: 1px solid #eee; }
 a { color: #1565c0; text-decoration: none; font-weight: bold; }
 a:hover { text-decoration: underline; }
+
+/* Etykieta Budżetu */
+.budget-badge {
+    background-color: #fff8e1;
+    border: 1px solid #ffe082;
+    color: #b78103;
+    padding: 10px 15px;
+    border-radius: 20px;
+    display: inline-block;
+    font-size: 15px;
+    margin: 5px 0 15px 0;
+    font-weight: 500;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
