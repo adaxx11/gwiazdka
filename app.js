@@ -79,7 +79,10 @@ loginBtn.addEventListener('click', async () => {
     if (!user || !pass) return;
 
     try {
-        const userRef = doc(db, "users", user);
+        // Tworzymy taki sam unikalny identyfikator dokumentu, jak w adminie
+        const userDocId = `${user}_${currentFamilyId}`; // np. maciek_3a8f2c9e
+        
+        const userRef = doc(db, "users", userDocId); // <-- ZMIANA: szukamy po połączonym ID
         const userSnap = await getDoc(userRef);
 
         if (userSnap.exists()) {
@@ -96,7 +99,7 @@ loginBtn.addEventListener('click', async () => {
             let isPasswordCorrect = !userData.isSecured ? (userData.password === pass) : (CryptoJS.SHA256(pass).toString() === userData.password);
 
             if (isPasswordCorrect) {
-                currentUser = { id: userSnap.id, ...userData };
+                currentUser = { id: userDocId, ...userData };
                 loginError.classList.add('hidden');
                 
                 if (!userData.isSecured) {
