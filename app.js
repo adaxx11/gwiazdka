@@ -74,40 +74,35 @@ window.onload = async () => {
 
 // === 5. LOGOWANIE ===
 loginBtn.addEventListener('click', async () => {
-    const user = usernameInput.value.trim().toLowerCase();
+    // 1. Użytkownik wpisuje w okienko samo imię (np. "adam") i hasło (np. "adam")
+    const user = usernameInput.value.trim().toLowerCase(); 
     const pass = passwordInput.value.trim().toLowerCase();
     if (!user || !pass) return;
 
     try {
-        // Tworzymy taki sam unikalny identyfikator dokumentu, jak w adminie
-        const userDocId = `${user}_${currentFamilyId}`; // np. maciek_3a8f2c9e
+        // 2. TUTAJ BUDUJEMY POPRAWNY IDENTYFIKATOR DOKUMENTU Z BAZY
+        // Łączymy wpisane imię "adam" z tokenem z linku "3a8f2c9e" -> wychodzi "adam_3a8f2c9e"
+        const userDocId = `${user}_${currentFamilyId}`; 
         
-        const userRef = doc(db, "users", userDocId); // <-- ZMIANA: szukamy po połączonym ID
+        // 3. DO BAZY PYTAMY O 'userDocId', A NIE O 'user'!
+        const userRef = doc(db, "users", userDocId); 
         const userSnap = await getDoc(userRef);
 
         if (userSnap.exists()) {
             const userData = userSnap.data();
 
-            // WALIDACJA WIELORODZINNOŚCI: Czy użytkownik loguje się do właściwej rodziny?
-            if (userData.familyId !== currentFamilyId) {
-                loginError.innerText = "Nie należysz do tej rodziny! Sprawdź link.";
-                loginError.classList.remove('hidden');
-                return;
-            }
-
-            // Sprawdzenie hasła: czysty tekst (przy 1. logowaniu) lub hash SHA-256 (kolejne logowania)
+            // 4. Sprawdzanie hasła (użytkownik podał "adam", a w bazie w polu password jest "adam")
             let isPasswordCorrect = !userData.isSecured ? (userData.password === pass) : (CryptoJS.SHA256(pass).toString() === userData.password);
 
             if (isPasswordCorrect) {
-                currentUser = { id: userDocId, ...userData };
+                // 5. ZAPAMIĘTUJEMY W SESJI PEŁNE ID DOKUMENTU (adam_3a8f2c9e)
+                currentUser = { id: userDocId, ...userData }; 
                 loginError.classList.add('hidden');
                 
                 if (!userData.isSecured) {
-                    // Przejście do ustawiania prywatnego PIN-u
                     loginPanel.classList.add('hidden');
                     pinPanel.classList.remove('hidden');
                 } else {
-                    // Konto bezpieczne -> wejdź do pulpitu
                     clearTextPin = pass;
                     sessionStorage.setItem('secretSantaPin', clearTextPin);
                     localStorage.setItem('secretSantaUser', JSON.stringify(currentUser));
