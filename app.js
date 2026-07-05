@@ -77,7 +77,6 @@ loginBtn.addEventListener('click', async () => {
     if (!user || !pass) return;
 
     try {
-        // Automatyczne doklejanie tokenu w tle (Użytkownik wpisuje tylko imię!)
         const userDocId = `${user}_${currentFamilyId}`; 
         
         const userRef = doc(db, "users", userDocId); 
@@ -112,7 +111,6 @@ savePinBtn.addEventListener('click', async () => {
     if (pin.length !== 4) { pinError.classList.remove('hidden'); return; }
 
     try {
-        // POPRAWKA: Szyfrowanie startowe w adminie używa samego czystego imienia (np. "adam"), a nie "adam_token"
         const pureUsername = currentUser.name.toLowerCase();
         
         const bytes = CryptoJS.AES.decrypt(currentUser.drawnUser, pureUsername);
@@ -240,7 +238,6 @@ async function renderGlobalTable() {
             const data = docSnap.data();
             const id = docSnap.id;
             
-            // POPRAWKA: Porównujemy ID dokumentu z formatem imię_token (np. "ewka_3a8f2c9e")
             const targetDocId = `${decodedDrawnUser}_${currentFamilyId}`;
             
             const card = document.createElement('div');
