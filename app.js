@@ -52,7 +52,6 @@ let decodedDrawnUser = "";
 
 // === 4. START APLIKACJI (ONLOAD) ===
 window.onload = async () => {
-    // BLOKADA: Jeśli w linku brakuje kodu rodziny, aplikacja się nie uruchomi
     if (!currentFamilyId) {
         document.body.innerHTML = `
             <div style='text-align:center; padding:50px; font-family:sans-serif;'>
@@ -62,7 +61,6 @@ window.onload = async () => {
         return;
     }
 
-    // Auto-logowanie z pamięci przeglądarki
     const savedUser = localStorage.getItem('secretSantaUser');
     const savedPin = sessionStorage.getItem('secretSantaPin');
     if (savedUser && savedPin) {
@@ -74,28 +72,23 @@ window.onload = async () => {
 
 // === 5. LOGOWANIE ===
 loginBtn.addEventListener('click', async () => {
-    // 1. Użytkownik wpisuje w okienko samo imię (np. "adam") i hasło (np. "adam")
     const user = usernameInput.value.trim().toLowerCase(); 
     const pass = passwordInput.value.trim().toLowerCase();
     if (!user || !pass) return;
 
     try {
-        // 2. TUTAJ BUDUJEMY POPRAWNY IDENTYFIKATOR DOKUMENTU Z BAZY
-        // Łączymy wpisane imię "adam" z tokenem z linku "3a8f2c9e" -> wychodzi "adam_3a8f2c9e"
+        // Automatyczne doklejanie tokenu w tle (Użytkownik wpisuje tylko imię!)
         const userDocId = `${user}_${currentFamilyId}`; 
         
-        // 3. DO BAZY PYTAMY O 'userDocId', A NIE O 'user'!
         const userRef = doc(db, "users", userDocId); 
         const userSnap = await getDoc(userRef);
 
         if (userSnap.exists()) {
             const userData = userSnap.data();
 
-            // 4. Sprawdzanie hasła (użytkownik podał "adam", a w bazie w polu password jest "adam")
             let isPasswordCorrect = !userData.isSecured ? (userData.password === pass) : (CryptoJS.SHA256(pass).toString() === userData.password);
 
             if (isPasswordCorrect) {
-                // 5. ZAPAMIĘTUJEMY W SESJI PEŁNE ID DOKUMENTU (adam_3a8f2c9e)
                 currentUser = { id: userDocId, ...userData }; 
                 loginError.classList.add('hidden');
                 
@@ -119,14 +112,17 @@ savePinBtn.addEventListener('click', async () => {
     if (pin.length !== 4) { pinError.classList.remove('hidden'); return; }
 
     try {
-        // 1. Odszyfruj wylosowaną osobę dotychczasowym hasłem (loginem)
-        const bytes = CryptoJS.AES.decrypt(currentUser.drawnUser, currentUser.id);
+        // POPRAWKA: Szyfrowanie startowe w adminie używa samego czystego imienia (np. "adam"), a nie "adam_token"
+        const pureUsername = currentUser.name.toLowerCase();
+        
+        const bytes = CryptoJS.AES.decrypt(currentUser.drawnUser, pureUsername);
         const decrypted = bytes.toString(CryptoJS.enc.Utf8);
         
-        // 2. Zaszyfruj ją ponownie nowym prywatnym PIN-em
+        if (!decrypted) {
+            throw new Error("Nie udało się odszyfrować wylosowanej osoby kluczem startowym.");
+        }
+
         const reEncrypted = CryptoJS.AES.encrypt(decrypted, pin).toString();
-        
-        // 3. Stwórz hash SHA-256 z PIN-u do bezpiecznego logowania
         const hashedPin = CryptoJS.SHA256(pin).toString();
 
         const userRef = doc(db, "users", currentUser.id);
@@ -138,7 +134,10 @@ savePinBtn.addEventListener('click', async () => {
         localStorage.setItem('secretSantaUser', JSON.stringify(currentUser));
         
         await showDashboard();
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+        console.error(e); 
+        alert("Wystąpił problem przy zabezpieczaniu konta. Sprawdź konsolę.");
+    }
 });
 
 // === 7. PULPIT GŁÓWNY (DASHBOARD) ===
@@ -146,7 +145,6 @@ async function showDashboard() {
     loginPanel.classList.add('hidden'); pinPanel.classList.add('hidden'); dashboardPanel.classList.remove('hidden');
     welcomeMessage.innerText = `Cześć, ${currentUser.name}!`;
 
-    // DYNAMICZNE POBIERANIE BUDŻETU Z BAZY DANYCH DLA TEJ RODZINY
     try {
         const familyRef = doc(db, "families", currentFamilyId);
         const familySnap = await getDoc(familyRef);
@@ -156,7 +154,6 @@ async function showDashboard() {
         }
     } catch (e) { console.error("Błąd pobierania budżetu:", e); }
 
-    // Obsługa sekcji losowania
     if (currentUser.hasDrawn) {
         drawSection.classList.add('hidden'); resultSection.classList.remove('hidden');
         try {
@@ -184,7 +181,6 @@ function renderMyGifts() {
     });
 }
 
-// Dodawanie prezentu
 addGiftBtn.addEventListener('click', async () => {
     const name = giftNameInput.value.trim();
     let link = giftLinkInput.value.trim();
@@ -212,7 +208,6 @@ addGiftBtn.addEventListener('click', async () => {
     } catch (e) { console.error(e); }
 });
 
-// Usuwanie prezentu
 myGiftsList.addEventListener('click', async (e) => {
     if (!e.target.classList.contains('del-btn')) return;
     const index = parseInt(e.target.getAttribute('data-index'), 10);
@@ -237,7 +232,6 @@ myGiftsList.addEventListener('click', async (e) => {
 async function renderGlobalTable() {
     globalGiftsContainer.innerHTML = "Ładowanie tablicy pomysłów...";
     try {
-        // FILTR: Pobieramy tylko tych użytkowników, którzy mają familyId równy aktualnemu kodowi z linku
         const q = query(collection(db, "users"), where("familyId", "==", currentFamilyId));
         const querySnapshot = await getDocs(q);
         globalGiftsContainer.innerHTML = "";
@@ -246,11 +240,13 @@ async function renderGlobalTable() {
             const data = docSnap.data();
             const id = docSnap.id;
             
+            // POPRAWKA: Porównujemy ID dokumentu z formatem imię_token (np. "ewka_3a8f2c9e")
+            const targetDocId = `${decodedDrawnUser}_${currentFamilyId}`;
+            
             const card = document.createElement('div');
             card.classList.add('family-card');
             
-            // Wyróżnienie wizualne karty wylosowanej osoby
-            if (currentUser.hasDrawn && id === decodedDrawnUser) {
+            if (currentUser.hasDrawn && id === targetDocId) {
                 card.classList.add('target');
             }
 
@@ -270,7 +266,7 @@ async function renderGlobalTable() {
                 });
             }
 
-            card.innerHTML = `<h4>👤 Prezenty osoby: <b>${data.name}</b> ${id === decodedDrawnUser ? " 🔥 (TWOJA OSOBA!)" : ""}</h4>${giftsHtml}`;
+            card.innerHTML = `<h4>👤 Prezenty osoby: <b>${data.name}</b> ${id === targetDocId ? " 🔥 (TWOJA OSOBA!)" : ""}</h4>${giftsHtml}`;
             globalGiftsContainer.appendChild(card);
         });
     } catch (e) { console.error(e); globalGiftsContainer.innerHTML = "Błąd pobierania tablicy."; }
@@ -291,6 +287,6 @@ drawBtn.addEventListener('click', async () => {
 logoutBtn.addEventListener('click', () => {
     localStorage.clear(); sessionStorage.clear();
     currentUser = null; clearTextPin = ""; decodedDrawnUser = "";
-    usernameInput.value = ""; passwordInput.value = ""; newPinInput.value = "";
+    usernameInput.value = ""; passwordInput.value = "";
     dashboardPanel.classList.add('hidden'); pinPanel.classList.add('hidden'); loginPanel.classList.remove('hidden');
 });
