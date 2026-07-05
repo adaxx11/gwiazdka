@@ -1,23 +1,24 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore, doc, getDoc, updateDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getFirestore, doc, getDoc, updateDoc, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-
-
+// === 1. CONFIG FIREBASE ===
 const firebaseConfig = {
-
-  apiKey: "AIzaSyATB3WbLffGoNW93kLTBuTNuIReIBr8Zvc",
-  authDomain: "rodzinne-losowanie.firebaseapp.com",
-  projectId: "rodzinne-losowanie",
-  storageBucket: "rodzinne-losowanie.firebasestorage.app",
-  messagingSenderId: "744421189392",
-  appId: "1:744421189392:web:a3e450723890341c8e2795",
- measurementId: "G-CW6D6LGFR8"
+    apiKey: "AIzaSyATB3WbLffGoNW93kLTBuTNuIReIBr8Zvc",
+    authDomain: "rodzinne-losowanie.firebaseapp.com",
+    projectId: "rodzinne-losowanie",
+    storageBucket: "rodzinne-losowanie.firebasestorage.app",
+    messagingSenderId: "744421189392",
+    appId: "1:744421189392:web:a3e450723890341c8e2795"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// UI Elements
+// === 2. ODCZYTYWANIE KODU RODZINY Z LINKU (?rodzina=8znaków) ===
+const urlParams = new URLSearchParams(window.location.search);
+const currentFamilyId = urlParams.get('rodzina') ? urlParams.get('rodzina').toLowerCase() : null;
+
+// === 3. ELEMENTY INTERFEJSU (UI) ===
 const loginPanel = document.getElementById('login-panel');
 const pinPanel = document.getElementById('pin-panel');
 const dashboardPanel = document.getElementById('dashboard-panel');
@@ -34,29 +35,44 @@ const welcomeMessage = document.getElementById('welcome-message');
 const drawSection = document.getElementById('draw-section');
 const resultSection = document.getElementById('result-section');
 const drawnPersonText = document.getElementById('drawn-person');
+const budgetInfo = document.getElementById('budget-info');
+const budgetValue = document.getElementById('budget-value');
 
-// Gift Elements
+// Elementy listy prezentów
 const giftNameInput = document.getElementById('gift-name');
 const giftLinkInput = document.getElementById('gift-link');
 const addGiftBtn = document.getElementById('add-gift-btn');
 const myGiftsList = document.getElementById('my-gifts-list');
 const globalGiftsContainer = document.getElementById('global-gifts-container');
 
+// Zmienne sesji
 let currentUser = null;
 let clearTextPin = "";
 let decodedDrawnUser = ""; 
 
-window.onload = () => {
+// === 4. START APLIKACJI (ONLOAD) ===
+window.onload = async () => {
+    // BLOKADA: Jeśli w linku brakuje kodu rodziny, aplikacja się nie uruchomi
+    if (!currentFamilyId) {
+        document.body.innerHTML = `
+            <div style='text-align:center; padding:50px; font-family:sans-serif;'>
+                <h2 style='color:#c62828;'>❌ Błąd: Nieprawidłowy lub niepełny link.</h2>
+                <p>Upewnij się, że otwierasz link otrzymany od administratora (musi zawierać kod rodziny na końcu).</p>
+            </div>`;
+        return;
+    }
+
+    // Auto-logowanie z pamięci przeglądarki
     const savedUser = localStorage.getItem('secretSantaUser');
     const savedPin = sessionStorage.getItem('secretSantaPin');
     if (savedUser && savedPin) {
         currentUser = JSON.parse(savedUser);
         clearTextPin = savedPin;
-        showDashboard();
+        await showDashboard();
     }
 };
 
-// Logowanie
+// === 5. LOGOWANIE ===
 loginBtn.addEventListener('click', async () => {
     const user = usernameInput.value.trim().toLowerCase();
     const pass = passwordInput.value.trim().toLowerCase();
@@ -68,34 +84,51 @@ loginBtn.addEventListener('click', async () => {
 
         if (userSnap.exists()) {
             const userData = userSnap.data();
+
+            // WALIDACJA WIELORODZINNOŚCI: Czy użytkownik loguje się do właściwej rodziny?
+            if (userData.familyId !== currentFamilyId) {
+                loginError.innerText = "Nie należysz do tej rodziny! Sprawdź link.";
+                loginError.classList.remove('hidden');
+                return;
+            }
+
+            // Sprawdzenie hasła: czysty tekst (przy 1. logowaniu) lub hash SHA-256 (kolejne logowania)
             let isPasswordCorrect = !userData.isSecured ? (userData.password === pass) : (CryptoJS.SHA256(pass).toString() === userData.password);
 
             if (isPasswordCorrect) {
                 currentUser = { id: userSnap.id, ...userData };
                 loginError.classList.add('hidden');
+                
                 if (!userData.isSecured) {
+                    // Przejście do ustawiania prywatnego PIN-u
                     loginPanel.classList.add('hidden');
                     pinPanel.classList.remove('hidden');
                 } else {
+                    // Konto bezpieczne -> wejdź do pulpitu
                     clearTextPin = pass;
                     sessionStorage.setItem('secretSantaPin', clearTextPin);
                     localStorage.setItem('secretSantaUser', JSON.stringify(currentUser));
                     await showDashboard();
                 }
-            } else { loginError.classList.remove('hidden'); }
-        } else { loginError.classList.remove('hidden'); }
+            } else { loginError.innerText = "Błędny login, hasło lub PIN!"; loginError.classList.remove('hidden'); }
+        } else { loginError.innerText = "Błędny login, hasło lub PIN!"; loginError.classList.remove('hidden'); }
     } catch (e) { console.error(e); }
 });
 
-// Ustawianie nowego PINu
+// === 6. USTAWIENIE NOWEGO PIN-U I RE-SZYFROWANIE ===
 savePinBtn.addEventListener('click', async () => {
     const pin = newPinInput.value.trim();
     if (pin.length !== 4) { pinError.classList.remove('hidden'); return; }
 
     try {
+        // 1. Odszyfruj wylosowaną osobę dotychczasowym hasłem (loginem)
         const bytes = CryptoJS.AES.decrypt(currentUser.drawnUser, currentUser.id);
         const decrypted = bytes.toString(CryptoJS.enc.Utf8);
+        
+        // 2. Zaszyfruj ją ponownie nowym prywatnym PIN-em
         const reEncrypted = CryptoJS.AES.encrypt(decrypted, pin).toString();
+        
+        // 3. Stwórz hash SHA-256 z PIN-u do bezpiecznego logowania
         const hashedPin = CryptoJS.SHA256(pin).toString();
 
         const userRef = doc(db, "users", currentUser.id);
@@ -110,11 +143,22 @@ savePinBtn.addEventListener('click', async () => {
     } catch (e) { console.error(e); }
 });
 
-// Pulpit Główny
+// === 7. PULPIT GŁÓWNY (DASHBOARD) ===
 async function showDashboard() {
     loginPanel.classList.add('hidden'); pinPanel.classList.add('hidden'); dashboardPanel.classList.remove('hidden');
     welcomeMessage.innerText = `Cześć, ${currentUser.name}!`;
 
+    // DYNAMICZNE POBIERANIE BUDŻETU Z BAZY DANYCH DLA TEJ RODZINY
+    try {
+        const familyRef = doc(db, "families", currentFamilyId);
+        const familySnap = await getDoc(familyRef);
+        if (familySnap.exists()) {
+            budgetValue.innerText = familySnap.data().budget;
+            budgetInfo.classList.remove('hidden');
+        }
+    } catch (e) { console.error("Błąd pobierania budżetu:", e); }
+
+    // Obsługa sekcji losowania
     if (currentUser.hasDrawn) {
         drawSection.classList.add('hidden'); resultSection.classList.remove('hidden');
         try {
@@ -130,7 +174,7 @@ async function showDashboard() {
     await renderGlobalTable();
 }
 
-// Renderuj MOJE prezenty
+// === 8. LISTA PREZENTÓW (MOJE POMYSŁY) ===
 function renderMyGifts() {
     myGiftsList.innerHTML = "";
     const list = currentUser.wishlist || [];
@@ -148,12 +192,14 @@ addGiftBtn.addEventListener('click', async () => {
     let link = giftLinkInput.value.trim();
     if (!name) return;
 
-    // Automatyczne dodawanie http:// jeśli użytkownik zapomni, żeby link poprawnie przekierowywał
     if (link && !/^https?:\/\//i.test(link)) {
         link = 'https://' + link;
     }
 
-    const newList = currentUser.wishlist || [];
+    let newList = [];
+    if (currentUser.wishlist && Array.isArray(currentUser.wishlist)) {
+        newList = [...currentUser.wishlist];
+    }
     newList.push({ name, link });
 
     try {
@@ -171,9 +217,12 @@ addGiftBtn.addEventListener('click', async () => {
 // Usuwanie prezentu
 myGiftsList.addEventListener('click', async (e) => {
     if (!e.target.classList.contains('del-btn')) return;
-    const index = e.target.getAttribute('data-index');
+    const index = parseInt(e.target.getAttribute('data-index'), 10);
     
-    const newList = currentUser.wishlist || [];
+    let newList = [];
+    if (currentUser.wishlist && Array.isArray(currentUser.wishlist)) {
+        newList = [...currentUser.wishlist];
+    }
     newList.splice(index, 1);
 
     try {
@@ -186,11 +235,13 @@ myGiftsList.addEventListener('click', async (e) => {
     } catch (e) { console.error(e); }
 });
 
-// Pobieranie i generowanie GLOBALNEJ tablicy
+// === 9. GLOBALNA TABLICA POMYSŁÓW (Z FILTROWANIEM RODZINY) ===
 async function renderGlobalTable() {
     globalGiftsContainer.innerHTML = "Ładowanie tablicy pomysłów...";
     try {
-        const querySnapshot = await getDocs(collection(db, "users"));
+        // FILTR: Pobieramy tylko tych użytkowników, którzy mają familyId równy aktualnemu kodowi z linku
+        const q = query(collection(db, "users"), where("familyId", "==", currentFamilyId));
+        const querySnapshot = await getDocs(q);
         globalGiftsContainer.innerHTML = "";
 
         querySnapshot.forEach((docSnap) => {
@@ -200,6 +251,7 @@ async function renderGlobalTable() {
             const card = document.createElement('div');
             card.classList.add('family-card');
             
+            // Wyróżnienie wizualne karty wylosowanej osoby
             if (currentUser.hasDrawn && id === decodedDrawnUser) {
                 card.classList.add('target');
             }
@@ -226,7 +278,7 @@ async function renderGlobalTable() {
     } catch (e) { console.error(e); globalGiftsContainer.innerHTML = "Błąd pobierania tablicy."; }
 }
 
-// Odkrywanie losowania
+// === 10. ODKRYWANIE LOSOWANIA ===
 drawBtn.addEventListener('click', async () => {
     try {
         const userRef = doc(db, "users", currentUser.id);
@@ -237,6 +289,7 @@ drawBtn.addEventListener('click', async () => {
     } catch (e) { console.error(e); }
 });
 
+// === 11. WYLOGOWANIE ===
 logoutBtn.addEventListener('click', () => {
     localStorage.clear(); sessionStorage.clear();
     currentUser = null; clearTextPin = ""; decodedDrawnUser = "";
