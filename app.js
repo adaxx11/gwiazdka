@@ -263,7 +263,7 @@ async function renderGlobalTable() {
                 });
             }
 
-            card.innerHTML = `<h4>👤 Pomysł na prezent: <b>${data.name}</b> ${id === targetDocId ? " 🔥 (TWOJA WYLOSOWANA OSOBA!)" : ""}</h4>${giftsHtml}`;
+            card.innerHTML = `<h4>👤 Pomysł na prezent: <b>${data.name}</b> ${id === targetDocId ? " 🌟 (TWOJA OSOBA!)" : ""}</h4>${giftsHtml}`;
             globalGiftsContainer.appendChild(card);
         });
     } catch (e) { console.error(e); globalGiftsContainer.innerHTML = "Błąd pobierania tablicy."; }
